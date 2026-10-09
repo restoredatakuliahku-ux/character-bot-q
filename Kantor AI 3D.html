@@ -1,0 +1,800 @@
+<!DOCTYPE html>
+<html lang="id"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Kantor AI 3D - Voxel Island Edition</title>
+<style>
+:root{--bg:#60a5fa;--panel:#172235;--ink:#f0f4f8;--mute:#a2b4cc;--line:#2e3e5c;--acc:#4ade80;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:light){:root:not([data-theme="dark"]){--panel:rgba(255,255,255,0.94);--ink:#1a2332;--mute:#57677d;--line:#d3dfed;--acc:#16a34a}}
+:root[data-theme="light"]{--panel:rgba(255,255,255,0.94);--ink:#1a2332;--mute:#57677d;--line:#d3dfed;--acc:#16a34a}
+html{height:100%;scroll-padding-top:env(safe-area-inset-top,0px)}
+body{height:100%;margin:0;background:linear-gradient(180deg,#60a5fa 0%,#93c5fd 65%,#bfdbfe 100%);color:var(--ink);font:14px/1.45 ui-rounded,"Trebuchet MS",system-ui,sans-serif;overflow:hidden}
+#c{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none;cursor:grab}
+#panel{position:fixed;right:14px;top:calc(14px + env(safe-area-inset-top,0px));width:320px;max-height:calc(100% - 28px);overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:14px;box-shadow:0 14px 40px rgba(15,28,50,0.32);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);z-index:10}
+.badge{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;background:rgba(74,222,128,0.18);color:var(--acc);font-size:11px;font-weight:700;border-radius:20px;letter-spacing:0.5px;margin-bottom:6px;text-transform:uppercase}
+h1{font-size:18px;margin:0 0 3px;display:flex;align-items:center;gap:6px;font-weight:700}
+.sub{color:var(--mute);margin:0 0 10px;font-size:12px;line-height:1.4}
+.sum{display:flex;gap:12px;margin-bottom:12px;font-size:12.5px;color:var(--mute);background:rgba(255,255,255,0.06);padding:8px 12px;border-radius:10px;border:1px solid var(--line)}
+.sum b{color:var(--acc);font-size:17px;margin-right:4px}
+.ag{display:block;width:100%;text-align:left;font:inherit;color:inherit;background:transparent;border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin-bottom:7px;cursor:pointer;transition:all .18s cubic-bezier(0.2,0.8,0.2,1)}
+.ag:hover{background:rgba(255,255,255,0.08);border-color:var(--mute);transform:translateY(-1px)}
+.ag:focus-visible{outline:2px solid var(--acc)}
+.ag.on{border-color:var(--acc);background:color-mix(in srgb,var(--acc) 14%,transparent);box-shadow:0 2px 10px color-mix(in srgb,var(--acc) 25%,transparent)}
+.top{display:flex;align-items:center;gap:8px;font-weight:600}
+.dot{width:11px;height:11px;border-radius:3px;flex:none;box-shadow:0 0 6px currentColor}
+.role{color:var(--mute);font-weight:400;font-size:11.5px;margin-left:auto}
+.task{margin-top:4px;font-size:12px;color:var(--ink);opacity:0.92;line-height:1.35}
+.bar{height:4px;background:var(--line);border-radius:2px;margin-top:6px;overflow:hidden}
+.bar i{display:block;height:100%;width:0;background:var(--acc);border-radius:2px;transition:width .3s linear}
+.hint{color:var(--mute);font-size:11.5px;margin:8px 0 0;line-height:1.4}
+@media (max-width:700px){#panel{left:10px;right:10px;top:auto;bottom:calc(10px + env(safe-area-inset-bottom,0px));width:auto;max-height:42%}}
+@media (prefers-reduced-motion:reduce){.bar i{transition:none}.ag{transition:none}}
+</style></head>
+<body>
+<canvas id="c" aria-label="Animasi 3D kantor AI Voxel Island"></canvas>
+<div id="panel">
+  <h1>Kantor AI 3D</h1>
+  <p class="sub">Pulau kampus voxel terapung lengkap dengan Lobby, Parkir, Sport Hall, Kebun PnL, Tambang Emas, dan Gym.</p>
+  <div class="sum"><span><b id="tot">0</b>selesai</span><span><b id="act">5</b>karyawan</span></div>
+  <div id="list"></div>
+  <p class="hint">Seret untuk memutar, gulir untuk zoom. Klik nama karyawan untuk mengikutinya.</p>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+// KOORDINAT LOKASI & ZONA DI PULAU VOXEL
+const P={
+ // Lobby Office
+ rec:    {x:0,   z:-1.5, lx:0,   lz:1,   zone:'Lobby Office'},
+ 
+ // Trading Room
+ trading:{x:-5,  z:-6,   lx:-5,  lz:-8.5,zone:'Trading Room'},
+ 
+ // Data Center
+ srv:    {x:3,   z:-7.5, lx:3,   lz:-9.5,zone:'Data Center'},
+ 
+ // Ruang Kerja Marketing & Support di Lobby
+ mkt:    {x:2,   z:-3.8, lx:2,   lz:-6,  zone:'Lobby Office'},
+ sup:    {x:4,   z:-3.8, lx:4,   lz:-6,  zone:'Lobby Office'},
+ hr:     {x:-2,  z:-4.5, lx:-2,  lz:-6.5,zone:'Lobby Office'},
+ 
+ // Parkir Kantor
+ parkir: {x:-14, z:-8,   lx:-14, lz:-11, zone:'Parkir Kantor'},
+ 
+ // Sport Hall
+ sport:  {x:9,   z:5,    lx:10,  lz:7.5, zone:'Sport Hall'},
+ 
+ // Gym & Ruang Makan
+ gym:    {x:8.5, z:-6,   lx:8.5, lz:-8.5,zone:'Gym & Ruang Makan'},
+ 
+ // Chapel / Altar Room
+ chapel: {x:18,  z:6,    lx:20,  lz:6,   zone:'Chapel'},
+ 
+ // Lahan Pertanian / Kebun PnL
+ kebun:  {x:-12, z:6,    lx:-12, lz:9,   zone:'Lahan PnL'},
+ 
+ // Tambang Emas XAUUSD
+ tambang:{x:-2,  z:13.5, lx:-2,  lz:16.5,zone:'Tambang Emas'}
+};
+
+// DATA 5 KARYAWAN ROBLOX
+const AG=[
+ {
+  n:'Nara',r:'Resepsionis',c:0xff6b7a,
+  skin:0xffe2c7,shirt:0xff6b7a,inner:0xffffff,pants:0x223048,shoes:0xffffff,hair:0x533526,
+  style:'receptionist',
+  t:[
+   ['rec',   'Menyambut tamu & absensi di Meja Lobby Office',4],
+   ['parkir','Memeriksa slot kendaraan di Parkir Kantor',3.5],
+   ['sport', 'Mengecek reservasi jadwal di Sport Hall',4],
+   ['rec',   'Kembali stanby di Meja Resepsionis',4]
+  ]
+ },
+ {
+  n:'Dika',r:'Trading & Keuangan',c:0x00b4d8,
+  skin:0xf8cb9c,shirt:0x1d3557,inner:0x00b4d8,pants:0x242833,shoes:0x111318,hair:0x181a1f,
+  style:'finance',
+  t:[
+   ['trading','Menganalisis grafik candlestick di Trading Room',4.5],
+   ['kebun',  'Memeriksa hasil panen di Lahan PnL Soros',4],
+   ['tambang','Inspeksi pasokan emas di Tambang Emas XAUUSD',4.5],
+   ['trading','Eksekusi order posisi baru di Trading Room',4]
+  ]
+ },
+ {
+  n:'Sari',r:'Marketing',c:0xf72585,
+  skin:0xffe4cf,shirt:0xf72585,inner:0x4cc9f0,pants:0x1e2738,shoes:0x7209b7,hair:0x371b42,
+  style:'marketing',
+  t:[
+   ['mkt',    'Menyusun materi kampanye di Meja Marketing',4],
+   ['kebun',  'Memperbarui papan billboard promosi di Lahan PnL',3.5],
+   ['gym',    'Makan siang & istirahat di Gym & Ruang Makan',4],
+   ['sport',  'Menonton pertandingan seru di Sport Hall',3.5]
+  ]
+ },
+ {
+  n:'Raka',r:'Customer Support & IT',c:0x10b981,
+  skin:0xf3c7a0,shirt:0x10b981,inner:0x0f172a,pants:0x2b3846,shoes:0x10b981,hair:0x3e291f,
+  style:'support',
+  t:[
+   ['sup',    'Membalas live chat & tiket keluhan pelanggan',4],
+   ['srv',    'Memeriksa suhu & performa rack di Data Center',4],
+   ['parkir', 'Membantu akses palang karcis di Parkir Kantor',3.5],
+   ['sup',    'Menutup tiket bantuan yang telah selesai',4]
+  ]
+ },
+ {
+  n:'Maya',r:'HR & Operasional',c:0x8b5cf6,
+  skin:0xffe0cb,shirt:0x8b5cf6,inner:0xf3e8ff,pants:0x281d38,shoes:0x47395e,hair:0x241915,
+  style:'hr',
+  t:[
+   ['hr',     'Memverifikasi data kehadiran tim di Meja HR',4],
+   ['gym',    'Mengecek kebersihan fasilitas Gym & Ruang Makan',3.5],
+   ['chapel', 'Meditasi & doa sejenak di Chapel Altar Room',4],
+   ['sport',  'Latihan pemanasan & olahraga di Sport Hall',3.5]
+  ]
+ }
+];
+
+const cv=document.getElementById('c');
+const R=new THREE.WebGLRenderer({canvas:cv,antialias:true});
+R.setPixelRatio(Math.min(devicePixelRatio,2));
+R.shadowMap.enabled=true;
+R.shadowMap.type=THREE.PCFSoftShadowMap;
+
+const S=new THREE.Scene();
+S.background=new THREE.Color(0x60a5fa);
+S.fog=new THREE.FogExp2(0x93c5fd,0.009);
+
+const cam=new THREE.PerspectiveCamera(45,1,.1,300);
+
+// Pencahayaan
+const hemi=new THREE.HemisphereLight(0xffffff,0x7cb518,.9);
+S.add(hemi);
+
+const sun=new THREE.DirectionalLight(0xfffbeb,1.1);
+sun.position.set(24,36,20);
+sun.castShadow=true;
+sun.shadow.mapSize.set(2048,2048);
+Object.assign(sun.shadow.camera,{left:-32,right:32,top:26,bottom:-26,near:1,far:100});
+sun.shadow.bias=-0.0005;
+S.add(sun);
+
+const M=c=>new THREE.MeshLambertMaterial({color:c});
+function box(w,h,d,c,x,y,z,p=S){
+ const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),M(c));
+ m.position.set(x,y,z);m.castShadow=m.receiveShadow=true;
+ p.add(m);return m;
+}
+
+// -------------------------------------------------------------
+// SISTEM PILL-SHAPED FLOATING BADGES (PERSIS SEPERTI DI GAMBAR)
+// -------------------------------------------------------------
+function nice(t){return t.replace(/\S+/g,w=>/[a-z\d]/.test(w)||w.length<=2||w==='XAUUSD'?w:w[0]+w.slice(1).toLowerCase())}
+function makePillBadge(icon,text,bgCol,borderCol,scale=1){
+ text=nice(text);const H=64,f='600 27px "Trebuchet MS",system-ui,sans-serif';
+ const k=document.createElement('canvas');let g=k.getContext('2d');g.font=f;
+ const W=Math.ceil(g.measureText(text).width)+44;k.width=W;k.height=H;g=k.getContext('2d');
+ g.fillStyle='rgba(15,23,42,0.55)';g.beginPath();g.roundRect(2,10,W-4,H-20,22);g.fill();
+ g.fillStyle='#fff';g.font=f;g.textAlign='center';g.textBaseline='middle';g.fillText(text,W/2,H/2+1);
+ const tx=new THREE.CanvasTexture(k);tx.anisotropy=4;
+ const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:tx,depthTest:false,transparent:true}));
+ sp.scale.set(.62*scale*W/H,.62*scale,1);sp.renderOrder=10;return sp;
+}
+
+function addLocationBadge(icon,text,bgCol,x,y,z,scale=1){
+ const b=makePillBadge(icon,text,bgCol,'rgba(255,255,255,0.4)',scale);
+ b.position.set(x,y,z);
+ S.add(b);
+ return b;
+}
+
+// -------------------------------------------------------------
+// AWAN-AWAN MELAYANG DI BAWAH PULAU
+// -------------------------------------------------------------
+const clouds=[];
+const cloudMat=new THREE.MeshLambertMaterial({color:0xffffff,flatShading:true});
+function createCloud(scale=1){
+ const cg=new THREE.Group();
+ const n=5+Math.floor(Math.random()*4);
+ for(let i=0;i<n;i++){
+  const r=(1+Math.random()*1)*scale;
+  const sph=new THREE.Mesh(new THREE.SphereGeometry(r,7,6),cloudMat);
+  sph.position.set((i-n/2)*(1.2*scale)+(Math.random()-.5)*.5*scale,(Math.random()-.5)*.5*scale,(Math.random()-.5)*.8*scale);
+  cg.add(sph);
+ }
+ return cg;
+}
+for(let i=0;i<40;i++){
+ const sc=1.5+Math.random()*2;
+ const cMesh=createCloud(sc);
+ const cy=-4.5-Math.random()*7;
+ cMesh.position.set((Math.random()-.5)*100,cy,(Math.random()-.5)*90);
+ S.add(cMesh);
+ clouds.push({mesh:cMesh,speed:.3+Math.random()*.4,baseY:cy,seed:Math.random()*10});
+}
+
+// -------------------------------------------------------------
+// 1. TERRAIN PULAU VOXEL RUMPUT BESAR (VOXEL FLOATING ISLAND)
+// -------------------------------------------------------------
+// Lapisan Rumput Utama (Green Voxel Grass)
+const islandW=56,islandD=44;
+box(islandW,1,islandD,0x55a630,0,-.5,0); // Top grass
+
+// Lapisan Tanah Voxel di Bawah Rumput (Dirt layer)
+box(islandW-.2,1.8,islandD-.2,0x7f5539,0,-1.9,0);
+// Underside Terapung (Stone base)
+box(islandW-4,2.5,islandD-4,0x495057,0,-4.0,0);
+box(islandW-12,3,islandD-12,0x343a40,0,-6.7,0);
+
+// Pohon-pohon Voxel (Voxel Trees & Shrubs seperti di gambar)
+function makeVoxelTree(x,z){
+ // Batang kayu cokelat
+ box(.8,2.8,.8,0x6f4e37,x,1.4,z);
+ // Daun bertingkat kotak hijau
+ box(2.6,1.4,2.6,0x2d6a4f,x,3.2,z);
+ box(1.8,1.2,1.8,0x40916c,x,4.4,z);
+ box(1.0,.8,1.0,0x52b788,x,5.3,z);
+}
+
+// Tebar pohon-pohon di sekeliling pulau
+const treeCoords=[
+ [-23,-18],[-18,-19],[-12,-18],[-6,-18],[0,-18],[8,-18],[16,-18],[22,-18],
+ [-24,-10],[-25,-2],[-24,6],[-24,14],[-24,19],
+ [24,-11],[25,-2],[25,7],[24,15],[23,19],
+ [-18,18],[-10,18],[6,18],[12,18],[18,18]
+];
+treeCoords.forEach(([tx,tz])=>{
+ makeVoxelTree(tx+(Math.random()-.5)*1.5,tz+(Math.random()-.5)*1.5);
+});
+
+// Semak-semak rumput liar kecil
+for(let i=0;i<35;i++){
+ const rx=(Math.random()-.5)*50;
+ const rz=(Math.random()-.5)*38;
+ if(Math.abs(rx)>6 || Math.abs(rz)>6){
+  box(.4,.3,.4,0x74c69d,rx,.15,rz);
+ }
+}
+
+const flw=[0xff6b9d,0xffd166,0xffffff,0xc77dff];
+for(let i=0;i<70;i++){const fx=(Math.random()-.5)*52,fz=(Math.random()-.5)*40;
+ if(Math.abs(fx)>20||Math.abs(fz)>15){box(.05,.3,.05,0x2d6a4f,fx,.15,fz);box(.15,.15,.15,flw[i%4],fx,.38,fz)}}
+
+// Jalan Setapak Kerikil/Paving Penghubung
+function makePath(w,d,x,z){
+ const p=box(w,.02,d,0xd7c49e,x,.01,z);
+ return p;
+}
+makePath(2.4,18,0,1);     // Jalur tengah Utara-Selatan
+makePath(20,2.4,0,0);     // Jalur tengah Barat-Timur
+makePath(12,2,-8,-4);     // Menuju Parkir
+makePath(2,8,-12,3);      // Menuju Kebun
+makePath(2,8,-2,9);       // Menuju Tambang
+makePath(10,2,11,4);      // Menuju Sport Hall
+
+// -------------------------------------------------------------
+// 2. PARKIR KANTOR (Lengkap dengan Garis & Mobil Kotak Voxel)
+// -------------------------------------------------------------
+// Aspal Parkiran
+box(14,.04,11,0x2b2d42,-14,.02,-8);
+// Garis-garis parkir putih
+for(let p=0;p<4;p++){
+ box(.12,.02,4,0xffffff,-19+p*3.4,.05,-8);
+}
+addLocationBadge('🅿️','PARKIR KANTOR','#1e3a8a',-14,3.2,-13,1.05);
+
+// Mobil-mobil kotak Roblox/Voxel warna-warni
+function makeVoxelCar(x,z,col,rot=0){
+ const cg=new THREE.Group();
+ cg.position.set(x,.35,z);
+ cg.rotation.y=rot;
+ // Bodi bawah
+ box(1.8,.5,3.2,col,0,.25,0,cg);
+ // Kabin atas
+ box(1.6,.55,1.8,0x1e293b,0,.75,-.2,cg);
+ // Kaca depan & belakang
+ box(1.5,.4,.1,0x93c5fd,0,.75,.72,cg);
+ box(1.5,.4,.1,0x93c5fd,0,.75,-1.12,cg);
+ // Roda-roda
+ [-0.95,0.95].forEach(wx=>{
+  [-1,1].forEach(wz=>{
+   box(.25,.4,.6,0x111111,wx,.1,wz,cg);
+  });
+ });
+ // Lampu depan
+ box(.3,.15,.05,0xfef08a,-.6,.3,1.62,cg);
+ box(.3,.15,.05,0xfef08a,.6,.3,1.62,cg);
+ S.add(cg);
+}
+makeVoxelCar(-17.5,-8,0x0284c7); // Mobil Biru
+makeVoxelCar(-14.2,-8,0xf97316); // Mobil Oranye
+makeVoxelCar(-10.8,-8,0xf8fafc); // Mobil Putih
+
+// -------------------------------------------------------------
+// 3. LOBBY OFFICE & KANTOR PUSAT
+// -------------------------------------------------------------
+// Lantai Kayu Modern
+box(18,.06,12,0xdeb887,0,.03,-5);
+// Dinding Kaca Transparan & Rangka
+const glassMat=new THREE.MeshLambertMaterial({color:0xe0f2fe,transparent:true,opacity:.35});
+function glassWall(w,h,d,x,y,z){
+ const g=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),glassMat);
+ g.position.set(x,y,z);S.add(g);
+ box(w+.04,.08,d+.04,0x334155,x,y+h/2,z);
+ box(w+.04,.08,d+.04,0x334155,x,y-h/2,z);
+}
+glassWall(18,2.6,.1,0,1.3,-11); // Dinding belakang
+glassWall(.1,2.6,12,-9,1.3,-5);  // Dinding kiri
+glassWall(.1,2.6,12,9,1.3,-5);   // Dinding kanan
+// Dinding depan dengan bukaan pintu
+glassWall(7,2.6,.1,-5.5,1.3,1);
+glassWall(7,2.6,.1,5.5,1.3,1);
+
+addLocationBadge('🚪','LOBBY OFFICE','#dc2626',0,3.5,1.3,1.05);
+addLocationBadge('🚪','PINTU KEBUN','#78350f',-9,3.2,1,0.85);
+addLocationBadge('🚪','PINTU BELAKANG','#475569',0,3.5,-11.3,0.85);
+
+// Meja Resepsionis di Lobby
+box(3.2,.85,1.1,0xff6b7a,0,.45,-1.5);
+box(3.3,.06,1.2,0xffffff,0,.9,-1.5);
+box(.7,.45,.04,0x1e293b,0,1.2,-1.4);
+
+// Meja Kerja Tim (Marketing, Support, HR)
+[
+ {x:2, z:-3.8,n:'Marketing',c:0xf72585},
+ {x:4.5,z:-3.8,n:'Customer Support',c:0x10b981},
+ {x:-2, z:-4.5,n:'HR',c:0x8b5cf6}
+].forEach(d=>{
+ box(1.8,.1,1,0x8d5b4c,d.x,.75,d.z);
+ box(.06,.75,.9,0x5c3d2e,d.x-.85,.38,d.z);
+ box(.06,.75,.9,0x5c3d2e,d.x+.85,.38,d.z);
+ const scr=box(.7,.44,.03,d.c,d.x,1.15,d.z-.1);
+ scr.material.emissive=new THREE.Color(d.c).multiplyScalar(0.4);
+ box(.5,.08,.5,0x334155,d.x,.45,d.z+.6);
+});
+
+// -------------------------------------------------------------
+// 4. TRADING ROOM
+// -------------------------------------------------------------
+// Sekat partisi ruangan
+box(.08,2.4,5.5,0x64748b,-3.5,1.2,-7.5);
+addLocationBadge('📈','Trading Room','#1e293b',-5.5,3.3,-7,0.9);
+
+// Meja Trading dengan 3 Monitor Grafik Candlestick
+box(2.8,.1,1.1,0x1e293b,-5.5,.75,-8.5);
+[-6.2,-5.5,-4.8].forEach((mx,idx)=>{
+ const mon=box(.65,.45,.04,0x0f172a,mx,1.2,-8.7);
+ mon.rotation.y=(idx-1)*.2;
+ const chart=box(.61,.41,.01,idx===1?0x00ff9c:0x38bdf8,mx,1.2,-8.67);
+ chart.rotation.y=(idx-1)*.2;
+ chart.material.emissive=new THREE.Color(0x0284c7);
+});
+
+// -------------------------------------------------------------
+// 5. DATA CENTER (SERVER RACKS)
+// -------------------------------------------------------------
+box(.08,2.4,5.5,0x64748b,5.5,1.2,-7.5);
+addLocationBadge('🖥️','DATA CENTER','#0f172a',3,3.3,-9,0.9);
+
+const leds=[];
+[2.2,4.2].forEach(sx=>{
+ box(1.2,2.4,.9,0x1e293b,sx,1.2,-9);
+ for(let i=0;i<7;i++){
+  const l=box(1,.08,.03,0x00ff9c,sx,.4+i*.28,-8.53);
+  l.material.emissive=new THREE.Color(0x00cc77);
+  leds.push(l);
+ }
+});
+
+// -------------------------------------------------------------
+// 6. GYM & RUANG MAKAN (CAFETERIA & FITNESS)
+// -------------------------------------------------------------
+box(8,.06,8,0xfef3c7,8.5,.03,-6.5);
+addLocationBadge('🍽️','GYM & RUANG MAKAN','#334155',8.5,3.4,-6.5,0.95);
+// Meja Makan & Kursi
+box(2.2,.8,1.2,0xd97706,8.5,.4,-6);
+box(.5,.45,.5,0x451a03,7.2,.25,-6);
+box(.5,.45,.5,0x451a03,9.8,.25,-6);
+// Barbel / Alat Gym
+box(1.6,.1,.1,0x94a3b8,8.5,.1,-8.5);
+box(.2,.5,.5,0x0f172a,7.7,.25,-8.5);
+box(.2,.5,.5,0x0f172a,9.3,.25,-8.5);
+
+// -------------------------------------------------------------
+// 7. SPORT HALL (LAPANGAN PADEL / BASKET DENGAN DINDING KACA)
+// -------------------------------------------------------------
+// Lantai Lapangan Biru
+box(11,.06,10,0x0284c7,10,.03,6);
+// Garis Putih Lapangan
+box(10.6,.01,.1,0xffffff,10,.07,6);
+box(10.6,.01,.1,0xffffff,10,.07,10.6);
+box(10.6,.01,.1,0xffffff,10,.07,1.4);
+box(.1,.01,9.2,0xffffff,5,.07,6);
+box(.1,.01,9.2,0xffffff,15,.07,6);
+
+// Dinding Kaca Transparan Padel Court
+glassWall(11,2.6,.1,10,1.3,1.1);
+glassWall(11,2.6,.1,10,1.3,10.9);
+glassWall(.1,2.6,10,4.6,1.3,6);
+glassWall(.1,2.6,10,15.4,1.3,6);
+
+// Ring Basket / Net Padel
+box(8,.6,.04,0xffffff,10,.3,6).material.opacity=0.6; // Net tengah
+box(.1,3,.1,0x334155,14.8,1.5,6);
+box(.8,.6,.04,0xffffff,14.7,2.7,6); // Papan ring
+box(.4,.04,.4,0xe11d48,14.4,2.5,6); // Ring merah
+
+addLocationBadge('🏀','SPORT HALL','#ea580c',10,3.5,6,1.05);
+
+// -------------------------------------------------------------
+// 8. CHAPEL & ALTAR ROOM
+// -------------------------------------------------------------
+// Karpet Merah
+box(6,.06,8,0x991b1b,19,.03,6);
+// Altar Emas
+box(2,.8,.9,0xd97706,20.5,.4,6);
+box(2.2,.08,1,0xfef08a,20.5,.84,6);
+// Lilin & Lentera hangat
+box(.15,.35,.15,0xfffbeb,20.5,1.05,6).material.emissive=new THREE.Color(0xfbbf24);
+
+addLocationBadge('⛪','CHAPEL','#f8fafc',17.5,3.4,3,0.85);
+addLocationBadge('🪔','ALTAR ROOM','#fef3c7',19.5,3.4,7.5,0.85);
+
+// -------------------------------------------------------------
+// 9. LAHAN PERTANIAN / KEBUN PnL & BILLBOARDS
+// -------------------------------------------------------------
+// Bedeng Tanah Subur Cokelat
+for(let b=0;b<4;b++){
+ box(8,.18,1.2,0x582f0e,-14,.09,3+b*2);
+ // Tanaman hijau di atas bedeng
+ for(let c=0;c<6;c++){
+  box(.3,.35,.3,0x4ade80,-17+c*1.2,.26,3+b*2);
+ }
+}
+
+// Billboards & Papan PnL
+function makeBillboard(text,sub,x,z,w=3.4,h=1.6){
+ const bb=box(w,h,.08,0x1e293b,x,1.6,z);
+ const post=box(.12,1.6,.12,0x475569,x,.8,z);
+ const cvB=document.createElement('canvas');cvB.width=256;cvB.height=128;
+ const g=cvB.getContext('2d');
+ g.fillStyle='#111827';g.fillRect(0,0,256,128);
+ g.strokeStyle='#eab308';g.lineWidth=4;g.strokeRect(4,4,248,120);
+ g.fillStyle='#eab308';g.font='bold 24px sans-serif';g.textAlign='center';
+ g.fillText(text,128,48);
+ g.fillStyle='#4ade80';g.font='bold 20px sans-serif';
+ g.fillText(sub,128,88);
+ const tex=new THREE.CanvasTexture(cvB);
+ const signMesh=new THREE.Mesh(new THREE.PlaneGeometry(w-.1,h-.1),new THREE.MeshBasicMaterial({map:tex}));
+ signMesh.position.set(x,1.6,z+.05);S.add(signMesh);
+}
+
+makeBillboard('CRYPTO FUTURES','HIGH LEVERAGE',-14,1.8,3.2,1.5);
+makeBillboard('1 JUTA -> 100 JUTA','DALAM 1 TAHUN',-8,8.2,3.0,1.4);
+
+// Badge PnL +29.6%
+const pnlBadge=makePillBadge('📈','+29.6% PnL','#15803d','#4ade80',.8);
+pnlBadge.position.set(-14,2.7,4.5);S.add(pnlBadge);
+
+addLocationBadge('📈','LAHAN PnL SOROS','#78350f',-12,3.5,10,1.05);
+
+// -------------------------------------------------------------
+// 10. TAMBANG EMAS XAUUSD
+// -------------------------------------------------------------
+// Gundukan Batu Tambang
+box(7,2.8,6,0x475569,-2,1.4,17);
+box(5,1.8,5,0x334155,-2,3.4,17);
+// Bongkahan Emas XAUUSD Tertanam
+[[-3,1.8,14.8],[0,1.2,14.6],[-1,2.8,15.2],[-3.5,1.0,16.5]].forEach(([gx,gy,gz])=>{
+ const gold=box(.6,.6,.6,0xfacc15,gx,gy,gz);
+ gold.material.emissive=new THREE.Color(0xd97706);
+});
+
+// Mulut Gua Tambang
+box(2.2,2.2,.5,0x0f172a,-2,1.1,14.2);
+// Balok Penyangga Kayu Tambang
+box(.2,2.4,.2,0x78350f,-3.1,1.2,14.4);
+box(.2,2.4,.2,0x78350f,-.9,1.2,14.4);
+box(2.4,.2,.2,0x78350f,-2,2.3,14.4);
+
+// Rel Kereta Tambang
+box(1.2,.02,4,0x71717a,-2,.03,13);
+
+addLocationBadge('⛏️','TAMBANG EMAS XAUUSD','#451a03',-2,3.6,15.5,1.05);
+
+// -------------------------------------------------------------
+// KARAKTER ROBLOX DENGAN FLOATING NAME BADGE KAYA EMOJI
+// -------------------------------------------------------------
+function createRobloxFace(d){
+ const k=document.createElement('canvas');k.width=128;k.height=128;
+ const g=k.getContext('2d');
+ g.clearRect(0,0,128,128);
+
+ g.fillStyle='#111';
+ g.beginPath();g.arc(38,54,7.5,0,Math.PI*2);g.arc(90,54,7.5,0,Math.PI*2);g.fill();
+ g.fillStyle='#fff';
+ g.beginPath();g.arc(35,51,2.8,0,Math.PI*2);g.arc(87,51,2.8,0,Math.PI*2);g.fill();
+
+ if(d.style==='finance'){
+  g.strokeStyle='#1b1e23';g.lineWidth=4;
+  g.strokeRect(20,38,32,30);g.strokeRect(76,38,32,30);
+  g.beginPath();g.moveTo(52,50);g.lineTo(76,50);g.stroke();
+ }else if(d.style==='receptionist'||d.style==='marketing'){
+  g.fillStyle='rgba(255,105,135,0.45)';
+  g.beginPath();g.ellipse(26,68,9,5,0,0,Math.PI*2);g.ellipse(102,68,9,5,0,0,Math.PI*2);g.fill();
+ }
+ g.strokeStyle='#111';g.lineWidth=3.5;g.beginPath();
+ g.arc(64,76,14,0.15*Math.PI,0.85*Math.PI);g.stroke();
+
+ return new THREE.CanvasTexture(k);
+}
+
+function makeCharacterBadge(name){
+ const H=56,f='700 28px "Trebuchet MS",system-ui,sans-serif';
+ const k=document.createElement('canvas');let g=k.getContext('2d');g.font=f;
+ const W=Math.ceil(g.measureText(name).width)+36;k.width=W;k.height=H;g=k.getContext('2d');
+ g.fillStyle='rgba(15,23,42,0.5)';g.beginPath();g.roundRect(0,6,W,H-12,18);g.fill();
+ g.fillStyle='#fff';g.font=f;g.textAlign='center';g.textBaseline='middle';g.fillText(name,W/2,H/2+1);
+ const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(k),depthTest:false,transparent:true}));
+ sp.scale.set(.5*W/H,.5,1);sp.renderOrder=11;return sp;
+}
+
+function createRobloxCharacter(d,i){
+ const g=new THREE.Group();
+ const model=new THREE.Group();
+ g.add(model);
+
+ // 1. Kepala Roblox
+ const headGroup=new THREE.Group();
+ headGroup.position.set(0,1.52,0);
+ model.add(headGroup);
+
+ const headMesh=new THREE.Mesh(new THREE.BoxGeometry(.44,.44,.44),M(d.skin));
+ headMesh.castShadow=true;headGroup.add(headMesh);
+
+ // Stud Roblox
+ const stud=new THREE.Mesh(new THREE.CylinderGeometry(.1,.1,.08,16),M(d.skin));
+ stud.position.set(0,.26,0);headGroup.add(stud);
+
+ // Wajah
+ const faceTex=createRobloxFace(d);
+ const facePlane=new THREE.Mesh(new THREE.PlaneGeometry(.42,.42),new THREE.MeshBasicMaterial({map:faceTex,transparent:true}));
+ facePlane.position.set(0,0,.221);headGroup.add(facePlane);
+
+ // Rambut
+ box(.46,.15,.46,d.hair,0,.2,0,headGroup);
+ box(.46,.32,.12,d.hair,0,.08,-.2,headGroup);
+
+ // Aksesoris spesifik
+ if(d.style==='marketing'){
+  box(.48,.05,.08,0xffffff,0,.26,0,headGroup);
+  box(.12,.18,.16,0xf72585,-.24,.02,0,headGroup);
+  box(.12,.18,.16,0xf72585,.24,.02,0,headGroup);
+ }else if(d.style==='support'){
+  box(.48,.05,.07,0x1e293b,0,.26,0,headGroup);
+  box(.12,.16,.14,0x10b981,-.24,.02,0,headGroup);
+  box(.12,.16,.14,0x10b981,.24,.02,0,headGroup);
+  box(.03,.03,.16,0x1e293b,.22,-.04,.14,headGroup);
+ }
+
+ // 2. Torso & Baju Modis
+ const torso=new THREE.Group();
+ torso.position.set(0,1.02,0);
+ model.add(torso);
+ const torsoMesh=new THREE.Mesh(new THREE.BoxGeometry(.72,.7,.36),M(d.shirt));
+ torsoMesh.castShadow=true;torso.add(torsoMesh);
+
+ if(d.style==='finance'){
+  box(.28,.68,.02,0xffffff,0,0,.182,torso);
+  box(.08,.52,.04,0x00b4d8,0,-.06,.184,torso);
+ }else if(d.style==='receptionist'){
+  box(.32,.68,.02,0xffffff,0,0,.182,torso);
+  box(.14,.16,.05,0xffd166,0,-.12,.186,torso);
+ }
+
+ // 3. Tangan
+ function makeArm(xPos){
+  const armPivot=new THREE.Group();
+  armPivot.position.set(xPos,1.3,0);
+  model.add(armPivot);
+  const sleeve=new THREE.Mesh(new THREE.BoxGeometry(.26,.45,.28),M(d.shirt));
+  sleeve.position.set(0,-.225,0);sleeve.castShadow=true;
+  armPivot.add(sleeve);
+  const hand=new THREE.Mesh(new THREE.BoxGeometry(.25,.22,.27),M(d.skin));
+  hand.position.set(0,-.55,0);hand.castShadow=true;
+  armPivot.add(hand);
+  return armPivot;
+ }
+ const armL=makeArm(-.5);
+ const armR=makeArm(.5);
+
+ // 4. Kaki
+ function makeLeg(xPos){
+  const legPivot=new THREE.Group();
+  legPivot.position.set(xPos,.67,0);
+  model.add(legPivot);
+  const pants=new THREE.Mesh(new THREE.BoxGeometry(.3,.48,.3),M(d.pants));
+  pants.position.set(0,-.24,0);pants.castShadow=true;
+  legPivot.add(pants);
+  const shoe=new THREE.Mesh(new THREE.BoxGeometry(.31,.16,.33),M(d.shoes));
+  shoe.position.set(0,-.54,.01);shoe.castShadow=true;
+  legPivot.add(shoe);
+  const sole=new THREE.Mesh(new THREE.BoxGeometry(.31,.05,.34),M(0xffffff));
+  sole.position.set(0,-.62,.01);sole.castShadow=true;
+  legPivot.add(sole);
+  return legPivot;
+ }
+ const legL=makeLeg(-.18);
+ const legR=makeLeg(.18);
+
+ const home=P[d.t[0][0]];
+ g.position.set(home.x+(i-2)*.01,0,home.z+.01);
+ S.add(g);
+
+
+ const bc=document.createElement('canvas');bc.width=bc.height=64;const bg2=bc.getContext('2d');
+ const gr=bg2.createRadialGradient(32,32,2,32,32,30);gr.addColorStop(0,'rgba(0,0,0,.35)');gr.addColorStop(1,'rgba(0,0,0,0)');
+ bg2.fillStyle=gr;bg2.fillRect(0,0,64,64);
+ const blob=new THREE.Mesh(new THREE.PlaneGeometry(1.1,1.1),new THREE.MeshBasicMaterial({map:new THREE.CanvasTexture(bc),transparent:true,depthWrite:false}));
+ blob.rotation.x=-Math.PI/2;blob.position.y=.04;g.add(blob);
+ // Nama karakter
+ const tag=makeCharacterBadge(d.n);
+ tag.position.set(0,2.45,0);
+ g.add(tag);
+
+ return {
+  d,g,model,headGroup,torso,armL,armR,legL,legR,
+  k:0,ph:'work',tm:d.t[0][2]*Math.random(),
+  path:[],done:0,prog:0,lane:(i-2)*.35
+ };
+}
+
+const A=AG.map((d,i)=>createRobloxCharacter(d,i));
+
+// NAVIGASI PATHFINDING KAMPUS VOXEL
+function route(a,destKey){
+ const c=a.g.position;
+ const t=P[destKey];
+ const path=[];
+ path.push([c.x,c.z]);
+
+ // Jalan melalui persimpangan tengah (0,0) jika jarak jauh antar pulau/zona
+ if(Math.hypot(c.x-t.x,c.z-t.z)>7){
+  // Titik keluar dari zona asal
+  path.push([c.x>0?2:-2, c.z>0?2:-2]);
+  // Titik tengah kampus
+  path.push([a.lane, a.lane]);
+  // Titik masuk ke zona tujuan
+  path.push([t.x>0?2:-2, t.z>0?2:-2]);
+ }
+
+ path.push([t.x,t.z]);
+ a.path=path.filter((p,idx,arr)=>idx===0||Math.hypot(p[0]-arr[idx-1][0],p[1]-arr[idx-1][1])>.1);
+}
+
+// PANEL KONTROL SIDEBAR
+const list=document.getElementById('list');
+A.forEach((a,i)=>{
+ const b=document.createElement('button');b.className='ag';
+ const hex='#'+a.d.c.toString(16).padStart(6,'0');
+ b.innerHTML=`<div class="top"><span class="dot" style="background:${hex};color:${hex}"></span>${a.d.n}<span class="role">${a.d.r}</span></div><div class="task"></div><div class="bar"><i></i></div>`;
+ b.onclick=()=>{
+  follow=follow===i?-1:i;
+  A.forEach((x,j)=>x.el.classList.toggle('on',j===follow));
+ };
+ a.el=b;a.tx=b.querySelector('.task');a.bar=b.querySelector('i');
+ a.bar.style.background=hex;
+ list.appendChild(b);
+});
+
+let total=0,follow=-1;const totEl=document.getElementById('tot');
+
+// KONTROL KAMERA
+let th=.82,ph=1.02,dist=64,thT=.82,phT=1.02,distT=38;
+const tgt=new THREE.Vector3(0,.5,0);
+let drag=false,px=0,py=0;
+
+cv.addEventListener('pointerdown',e=>{
+ drag=true;px=e.clientX;py=e.clientY;
+ cv.setPointerCapture(e.pointerId);cv.style.cursor='grabbing';
+});
+cv.addEventListener('pointerup',()=>{drag=false;cv.style.cursor='grab';});
+cv.addEventListener('pointermove',e=>{
+ if(!drag)return;
+ thT-=(e.clientX-px)*.006;
+ phT=Math.min(1.35,Math.max(.35,phT-(e.clientY-py)*.005));
+ px=e.clientX;py=e.clientY;
+});
+cv.addEventListener('wheel',e=>{
+ e.preventDefault();
+ distT=Math.min(65,Math.max(10,distT+e.deltaY*.028));
+},{passive:false});
+
+function size(){
+ const w=innerWidth,h=innerHeight;
+ R.setSize(w,h,false);
+ cam.aspect=w/h;cam.updateProjectionMatrix();
+ if(w<700&&distT<36)distT=42;
+}
+addEventListener('resize',size);size();
+
+// LOOP UTAMA ANIMASI
+const clk=new THREE.Clock();let T=0;
+const HOME=new THREE.Vector3(0,.5,0);
+const damp=(a,b,k,dt)=>a+(b-a)*(1-Math.exp(-k*dt));
+const angD=(a,b)=>Math.atan2(Math.sin(b-a),Math.cos(b-a));
+A.forEach(a=>{a.sp=0;a.wp=Math.random()*6});
+function tick(){
+ requestAnimationFrame(tick);
+ const dt=Math.min(clk.getDelta(),.05);T+=dt;
+
+ // Awan berhembus perlahan
+ clouds.forEach(c=>{
+  c.mesh.position.x+=c.speed*dt;
+  c.mesh.position.y=c.baseY+Math.sin(T*.5+c.seed)*.2;
+  if(c.mesh.position.x>60) c.mesh.position.x=-60;
+ });
+
+ // LED Server kedap-kedip
+ leds.forEach((l,i)=>{
+  l.material.emissive.setHex(Math.sin(T*3+i*1.7)>-.2?0x00ff9c:0x003318);
+ });
+
+ // Animasi Karyawan (halus: akselerasi, blending pose)
+ A.forEach((a,i)=>{
+  const d=a.d,cur=d.t[a.k],g=a.g;
+  let tSp=0,arms=[-.3,-.3];
+  if(a.ph==='work'){
+   a.tm-=dt;const sp=P[cur[0]];a.prog=1-Math.max(a.tm,0)/cur[2];
+   g.rotation.y+=angD(g.rotation.y,Math.atan2(sp.lx-g.position.x,sp.lz-g.position.z))*(1-Math.exp(-6*dt));
+   const c0=cur[0];
+   if(c0==='sport'){arms=[-.4+Math.cos(T*6)*.2,-1.2+Math.sin(T*8)*.4]}
+   else if(c0==='tambang'){arms=[-.5,-1.4+Math.sin(T*6)*.6]}
+   else if(['trading','srv','rec','mkt','sup','hr'].includes(c0)){arms=[-.85+Math.sin(T*10+i)*.12,-.85+Math.cos(T*10+i)*.12]}
+   else{arms=[-.3,-.3+Math.sin(T*3)*.1]}
+   if(a.tm<=0){a.done++;total++;totEl.textContent=total;a.k=(a.k+1)%d.t.length;a.ph='walk';route(a,d.t[a.k][0])}
+  }else{
+   const w=a.path[0];
+   if(!w){a.ph='work';a.tm=d.t[a.k][2];a.prog=0}
+   else{
+    let rem=0,px0=g.position.x,pz0=g.position.z;
+    a.path.forEach(p=>{rem+=Math.hypot(p[0]-px0,p[1]-pz0);px0=p[0];pz0=p[1]});
+    tSp=Math.min(2.6,.3+rem*1.3);
+    a.sp=damp(a.sp,tSp,5,dt);
+    const dx=w[0]-g.position.x,dz=w[1]-g.position.z,dd=Math.hypot(dx,dz),st=Math.max(a.sp,.2)*dt;
+    if(dd<=st){g.position.x=w[0];g.position.z=w[1];a.path.shift()}
+    else{g.position.x+=dx/dd*st;g.position.z+=dz/dd*st;
+     g.rotation.y+=angD(g.rotation.y,Math.atan2(dx,dz))*(1-Math.exp(-9*dt))}
+   }
+  }
+  if(tSp===0)a.sp=damp(a.sp,0,6,dt);
+  const k=Math.min(1,a.sp/1.6);a.wp+=a.sp*dt*3.9;
+  const sw=Math.sin(a.wp)*.72*k;
+  a.legL.rotation.x=damp(a.legL.rotation.x,sw,22,dt);
+  a.legR.rotation.x=damp(a.legR.rotation.x,-sw,22,dt);
+  a.armL.rotation.x=damp(a.armL.rotation.x,-sw*k+arms[0]*(1-k),14,dt);
+  a.armR.rotation.x=damp(a.armR.rotation.x,sw*k+arms[1]*(1-k),14,dt);
+  a.model.position.y=damp(a.model.position.y,k*Math.abs(Math.sin(a.wp))*.055+(1-k)*Math.sin(T*3+i)*.015,20,dt);
+  a.model.rotation.x=damp(a.model.rotation.x,k*.07,8,dt);
+  a.headGroup.rotation.y=damp(a.headGroup.rotation.y,(1-k)*Math.sin(T*.7+i*2)*.3,4,dt);
+  const walking=a.ph==='walk';
+  const txt=walking?'Menuju '+P[d.t[a.k][0]].zone+': '+d.t[a.k][1]:d.t[a.k][1];
+  if(a.tx.textContent!==txt)a.tx.textContent=txt;
+  a.bar.style.width=(walking?0:a.prog*100)+'%';
+ });
+
+ // Kamera: damping tak bergantung frame rate
+ th=damp(th,thT,8,dt);ph=damp(ph,phT,8,dt);dist=damp(dist,distT,4,dt);
+ if(follow>=0)tgt.lerp(A[follow].g.position,1-Math.exp(-3*dt));
+ else tgt.lerp(HOME,1-Math.exp(-2.5*dt));
+
+ cam.position.set(
+  tgt.x+dist*Math.sin(ph)*Math.sin(th),
+  tgt.y+dist*Math.cos(ph),
+  tgt.z+dist*Math.sin(ph)*Math.cos(th)
+ );
+ cam.lookAt(tgt);
+
+ R.render(S,cam);
+}
+tick();
+</script></body></html>
